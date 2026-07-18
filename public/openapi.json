@@ -1,0 +1,184 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "KairoMesh Demo API",
+    "version": "0.1.0",
+    "description": "Validated quote and tamper-evident demo receipt endpoints. Inventory, failures, telemetry, and credits are simulated."
+  },
+  "servers": [{ "url": "/" }],
+  "paths": {
+    "/api/health": {
+      "get": {
+        "summary": "Service health",
+        "responses": {
+          "200": {
+            "description": "Healthy",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HealthResponse" } } }
+          }
+        }
+      }
+    },
+    "/api/quote": {
+      "post": {
+        "summary": "Build an explainable GPU schedule",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/QuoteRequest" } } }
+        },
+        "responses": {
+          "200": { "description": "Schedule produced", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/QuoteResponse" } } } },
+          "400": { "description": "Unreadable or invalid JSON body", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+          "409": { "description": "No policy-compatible capacity", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+          "413": { "description": "Payload exceeds the streaming byte limit", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+          "415": { "description": "Unsupported content type", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+          "422": { "description": "Validation failed", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+          "429": { "description": "Rate limit exceeded", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+          "500": { "description": "Unexpected scheduling failure", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+        }
+      }
+    },
+    "/api/demo/receipt": {
+      "post": {
+        "summary": "Create a schedule-bound deterministic demo receipt chain",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DemoReceiptRequest" } } }
+        },
+        "responses": {
+          "200": { "description": "Seven-block clean or nine-block failover SHA-256 event chain", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReceiptResponse" } } } },
+          "400": { "description": "Unreadable or invalid JSON body", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+          "409": { "description": "No policy-compatible schedule or failover capacity", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+          "413": { "description": "Payload exceeds the streaming byte limit", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+          "415": { "description": "Unsupported content type", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+          "422": { "description": "Receipt context does not match a recomputed schedule", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+          "500": { "description": "Unexpected receipt creation failure", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "PriorityWeights": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["cost", "reliability", "carbon", "latency", "trust"],
+        "properties": {
+          "cost": { "type": "number", "minimum": 0, "maximum": 1 },
+          "reliability": { "type": "number", "minimum": 0, "maximum": 1 },
+          "carbon": { "type": "number", "minimum": 0, "maximum": 1 },
+          "latency": { "type": "number", "minimum": 0, "maximum": 1 },
+          "trust": { "type": "number", "minimum": 0, "maximum": 1 }
+        }
+      },
+      "QuoteRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "workload", "minVramGb", "gpuCount", "durationMinutes", "maxPricePerGpuHour", "minimumEvidenceTier", "checkpointIntervalMinutes", "priorities"],
+        "properties": {
+          "id": { "type": "string", "minLength": 3, "maxLength": 64, "pattern": "^[a-zA-Z0-9_-]+$" },
+          "name": { "type": "string", "minLength": 3, "maxLength": 100 },
+          "workload": { "type": "string", "enum": ["generative-video", "image-batch", "fine-tune", "blender-render", "simulation"] },
+          "minVramGb": { "type": "integer", "minimum": 8, "maximum": 160 },
+          "gpuCount": { "type": "integer", "minimum": 1, "maximum": 4 },
+          "durationMinutes": { "type": "integer", "minimum": 1, "maximum": 720 },
+          "maxPricePerGpuHour": { "type": "number", "exclusiveMinimum": 0, "maximum": 25 },
+          "minimumEvidenceTier": { "type": "string", "enum": ["observed", "isolated", "attested"] },
+          "checkpointIntervalMinutes": { "type": "integer", "minimum": 2, "maximum": 60, "description": "Must not exceed durationMinutes." },
+          "priorities": { "$ref": "#/components/schemas/PriorityWeights" }
+        }
+      },
+      "DemoReceiptRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["scenario", "request"],
+        "properties": {
+          "scenario": { "type": "string", "enum": ["clean", "failover"] },
+          "request": { "$ref": "#/components/schemas/QuoteRequest" },
+          "failedNodeId": { "type": "string", "minLength": 3, "maxLength": 64, "pattern": "^[a-zA-Z0-9_-]+$", "description": "Required for failover and must be the primary node in the server-recomputed schedule; forbidden for clean receipts." }
+        },
+        "allOf": [
+          { "if": { "properties": { "scenario": { "const": "failover" } }, "required": ["scenario"] }, "then": { "required": ["failedNodeId"] } },
+          { "if": { "properties": { "scenario": { "const": "clean" } }, "required": ["scenario"] }, "then": { "not": { "required": ["failedNodeId"] } } }
+        ]
+      },
+      "NodeOffer": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "alias", "gpu", "vramGb", "region", "city", "pricePerHour", "reliability", "latencyMs", "carbonGramsPerKwh", "trustScore", "benchmarkScore", "queueSeconds", "status", "evidenceTier", "secureBoot", "supportedWorkloads", "coordinates"],
+        "properties": {
+          "id": { "type": "string" }, "alias": { "type": "string" }, "gpu": { "type": "string" }, "vramGb": { "type": "number" },
+          "region": { "type": "string" }, "city": { "type": "string" }, "pricePerHour": { "type": "number" }, "reliability": { "type": "number" },
+          "latencyMs": { "type": "number" }, "carbonGramsPerKwh": { "type": "number" }, "trustScore": { "type": "number" }, "benchmarkScore": { "type": "number" },
+          "queueSeconds": { "type": "number" }, "status": { "type": "string" }, "evidenceTier": { "type": "string" }, "secureBoot": { "type": "boolean" },
+          "supportedWorkloads": { "type": "array", "items": { "type": "string" } },
+          "coordinates": { "type": "object", "additionalProperties": false, "required": ["x", "y"], "properties": { "x": { "type": "number" }, "y": { "type": "number" } } }
+        }
+      },
+      "ScoredNode": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["node", "score", "factors"],
+        "properties": {
+          "node": { "$ref": "#/components/schemas/NodeOffer" },
+          "score": { "type": "number" },
+          "factors": {
+            "type": "object", "additionalProperties": false,
+            "required": ["cost", "reliability", "carbon", "latency", "trust", "diversity"],
+            "properties": { "cost": { "type": "number" }, "reliability": { "type": "number" }, "carbon": { "type": "number" }, "latency": { "type": "number" }, "trust": { "type": "number" }, "diversity": { "type": "number" } }
+          }
+        }
+      },
+      "SchedulePlan": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["jobId", "selected", "candidatesConsidered", "predictedCost", "marketRate", "savingsPercent", "estimatedStartSeconds", "checkpointCount", "policy", "explanation"],
+        "properties": {
+          "jobId": { "type": "string" }, "selected": { "type": "array", "items": { "$ref": "#/components/schemas/ScoredNode" } },
+          "candidatesConsidered": { "type": "integer" }, "predictedCost": { "type": "number" }, "marketRate": { "type": "number" },
+          "savingsPercent": { "type": "number" }, "estimatedStartSeconds": { "type": "number" }, "checkpointCount": { "type": "integer" },
+          "policy": { "const": "outcome-sla-v1" }, "explanation": { "type": "array", "items": { "type": "string" } }
+        }
+      },
+      "QuoteResponse": {
+        "type": "object", "additionalProperties": false, "required": ["data", "requestId", "simulated"],
+        "properties": { "data": { "$ref": "#/components/schemas/SchedulePlan" }, "requestId": { "type": "string", "format": "uuid" }, "simulated": { "const": true } }
+      },
+      "ReceiptEvent": {
+        "type": "object", "additionalProperties": false, "required": ["sequence", "type", "jobId", "timestamp", "detail"],
+        "properties": {
+          "sequence": { "type": "integer", "minimum": 1 },
+          "type": { "type": "string", "enum": ["JOB_ACCEPTED", "ARTIFACT_BOUND", "NODE_EVIDENCE_ACCEPTED", "SHARD_STARTED", "CHECKPOINT_COMMITTED", "NODE_LOST", "SHARD_RECOVERED", "OUTPUT_VERIFIED", "SETTLEMENT_AUTHORIZED"] },
+          "jobId": { "type": "string" }, "timestamp": { "type": "string", "format": "date-time" }, "nodeId": { "type": "string" }, "checkpoint": { "type": "integer" },
+          "detail": { "type": "object", "additionalProperties": { "oneOf": [{ "type": "string" }, { "type": "number" }, { "type": "boolean" }] } }
+        }
+      },
+      "ReceiptBlock": {
+        "type": "object", "additionalProperties": false, "required": ["event", "previousHash", "hash"],
+        "properties": { "event": { "$ref": "#/components/schemas/ReceiptEvent" }, "previousHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" }, "hash": { "type": "string", "pattern": "^[a-f0-9]{64}$" } }
+      },
+      "ReceiptData": {
+        "type": "object", "additionalProperties": false, "required": ["version", "jobId", "scenario", "chain", "rootHash", "claim"],
+        "properties": {
+          "version": { "const": "kairomesh-receipt/v1" }, "jobId": { "type": "string" }, "scenario": { "type": "string", "enum": ["clean", "failover"] },
+          "chain": { "type": "array", "minItems": 7, "maxItems": 9, "items": { "$ref": "#/components/schemas/ReceiptBlock" } },
+          "rootHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" }, "claim": { "type": "string" }
+        }
+      },
+      "ReceiptResponse": {
+        "type": "object", "additionalProperties": false, "required": ["data", "simulated"],
+        "properties": { "data": { "$ref": "#/components/schemas/ReceiptData" }, "simulated": { "const": true } }
+      },
+      "HealthResponse": {
+        "type": "object", "additionalProperties": false, "required": ["status", "service", "version", "mode", "timestamp"],
+        "properties": { "status": { "const": "ok" }, "service": { "const": "kairomesh-web" }, "version": { "type": "string" }, "mode": { "const": "demonstration" }, "timestamp": { "type": "string", "format": "date-time" } }
+      },
+      "ErrorResponse": {
+        "type": "object", "additionalProperties": true, "required": ["error", "message"],
+        "properties": {
+          "error": { "type": "string" }, "message": { "type": "string" }, "requestId": { "type": "string", "format": "uuid" }, "eligibleCount": { "type": "integer" },
+          "fields": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["path", "message"], "properties": { "path": { "type": "string" }, "message": { "type": "string" } } }
+        }
+      }
+    }
+  }
+}
