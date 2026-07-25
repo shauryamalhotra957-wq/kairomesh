@@ -234,6 +234,8 @@ export function MissionControl({
   const [runState, setRunState] = useState<RunState>("idle");
   const [progress, setProgress] = useState(0);
   const [events, setEvents] = useState<DemoEvent[]>(initialEvents);
+  const [followEvents, setFollowEvents] = useState(true);
+  const [unseenEvents, setUnseenEvents] = useState(0);
   const [failedNodeId, setFailedNodeId] = useState<string | null>(null);
   const [standbyNodeId, setStandbyNodeId] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<ReceiptData | null>(null);
@@ -242,6 +244,8 @@ export function MissionControl({
   const [copied, setCopied] = useState(false);
   const [branchLocked, setBranchLocked] = useState(false);
   const timers = useRef<Array<ReturnType<typeof setTimeout>>>([]);
+  const eventLogRef = useRef<HTMLDivElement>(null);
+  const previousEventCount = useRef(initialEvents.length);
   const eventCounter = useRef(0);
   const quoteRequestSequence = useRef(0);
   const quoteController = useRef<AbortController | null>(null);
@@ -284,6 +288,25 @@ export function MissionControl({
     runGeneration.current += 1;
   }, []);
 
+  useEffect(() => {
+    const added = Math.max(0, events.length - previousEventCount.current);
+    previousEventCount.current = events.length;
+    if (!followEvents) {
+      if (added > 0) setUnseenEvents((count) => count + added);
+      return;
+    }
+    setUnseenEvents(0);
+    const frame = window.requestAnimationFrame(() => {
+      const log = eventLogRef.current;
+      if (!log) return;
+      log.scrollTo({
+        top: log.scrollHeight,
+        behavior: reduceMotion ? "auto" : "smooth",
+      });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [events.length, followEvents, reduceMotion]);
+
   const clearTimers = () => {
     timers.current.forEach((timer) => clearTimeout(timer));
     timers.current = [];
@@ -304,6 +327,27 @@ export function MissionControl({
       tone,
     };
     setEvents((current) => [...current, event]);
+  };
+
+  const handleEventScroll = () => {
+    const log = eventLogRef.current;
+    if (!log) return;
+    const atLatest = log.scrollHeight - log.scrollTop - log.clientHeight < 24;
+    setFollowEvents(atLatest);
+    if (atLatest) setUnseenEvents(0);
+  };
+
+  const scrollToLatestEvents = () => {
+    setFollowEvents(true);
+    setUnseenEvents(0);
+    window.requestAnimationFrame(() => {
+      const log = eventLogRef.current;
+      if (!log) return;
+      log.scrollTo({
+        top: log.scrollHeight,
+        behavior: reduceMotion ? "auto" : "smooth",
+      });
+    });
   };
 
   const requestQuote = async (nextPreset: WorkloadPreset, nextTier: EvidenceTier, nextProfile: string) => {
@@ -429,6 +473,8 @@ export function MissionControl({
     runGeneration.current += 1;
     setBranchLocked(false);
     eventCounter.current = 0;
+    setFollowEvents(true);
+    setUnseenEvents(0);
     setEvents([]);
     setReceipt(null);
     setReceiptStatus("idle");
@@ -518,6 +564,8 @@ export function MissionControl({
     eventCounter.current = 0;
     setRunState("idle");
     setProgress(0);
+    setFollowEvents(true);
+    setUnseenEvents(0);
     setEvents(initialEvents);
     setFailedNodeId(null);
     setStandbyNodeId(null);
@@ -694,9 +742,21 @@ export function MissionControl({
           <div className="surface-card overflow-hidden">
             <div className="flex items-center justify-between border-b border-white/[0.07] p-4">
               <div className="flex items-center gap-2"><Waypoints aria-hidden="true" size={14} className="text-[#65a8ff]" /><h2 className="text-xs font-medium text-white">Evidence events</h2></div>
-              <span className="mono text-[0.52rem] uppercase tracking-[0.08em] text-[#687583]">presenter log</span>
+              <div className="flex items-center gap-2">
+                <span className="mono text-[0.52rem] uppercase tracking-[0.08em] text-[#687583]">presenter log</span>
+                {!followEvents && (
+                  <button
+                    type="button"
+                    onClick={scrollToLatestEvents}
+                    className="mono min-h-8 rounded-full border border-[#65a8ff]/20 bg-[#65a8ff]/[0.07] px-2.5 text-[0.5rem] uppercase tracking-[0.06em] text-[#8dc0ff] transition-colors hover:border-[#65a8ff]/40"
+                    aria-label={unseenEvents > 0 ? `Follow ${unseenEvents} new evidence events` : "Follow the latest evidence events"}
+                  >
+                    {unseenEvents > 0 ? `${unseenEvents} new` : "Follow live"}
+                  </button>
+                )}
+              </div>
             </div>
-            <div role="log" aria-live="polite" aria-relevant="additions" className="max-h-[28rem] min-h-[18rem] space-y-0 overflow-y-auto p-3">
+            <div ref={eventLogRef} onScroll={handleEventScroll} role="log" aria-live="polite" aria-relevant="additions" className="max-h-[28rem] min-h-[18rem] space-y-0 overflow-y-auto p-3">
               <AnimatePresence initial={false}>
                 {events.map((event) => (
                   <motion.div key={event.id} initial={reduceMotion ? false : { opacity: 0, x: 7 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.2 }} className="relative grid grid-cols-[2.8rem_1fr] gap-2 border-b border-white/[0.055] py-3 last:border-0">
