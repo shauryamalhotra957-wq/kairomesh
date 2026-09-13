@@ -1,5 +1,8 @@
 # KairoMesh  
 
+[![CI](https://github.com/shauryamalhotra957-wq/kairomesh/actions/workflows/ci.yml/badge.svg)](https://github.com/shauryamalhotra957-wq/kairomesh/actions) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+
 **GPU jobs that finish, even when hosts do not.**
 
 KairoMesh is a research-grade vertical slice of an **outcome cloud**: a peer-GPU control plane for bounded, checkpointable batch jobs. Instead of presenting a rented machine and hoping it stays online, the product thesis is to route against an explicit policy, recover an interrupted attempt, validate the declared output contract, and produce inspectable evidence before demo credits settle.
