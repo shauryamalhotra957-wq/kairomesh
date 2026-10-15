@@ -23,7 +23,6 @@ export interface LedgerAccount {
 
 export interface LedgerEntry {
   readonly accountId: string;
-  /** Positive values credit an account; negative values debit it. */
   readonly amount: Microcredits;
 }
 
@@ -193,7 +192,6 @@ export interface RefundDemoCreditsCommand {
 
 const ZERO = BigInt(0);
 
-/** Converts only lossless whole values. Decimal and unsafe Number inputs fail closed. */
 export function microcredits(value: bigint | number | string): Microcredits {
   if (typeof value === "bigint") return value;
   if (typeof value === "number") {
@@ -629,7 +627,6 @@ export function refundDemoCredits(
   });
 }
 
-/** Audits every transaction and the aggregate ledger without mutating state. */
 export function assertLedgerBalanced(ledger: DemoLedger): void {
   const transactionIds = new Set<string>();
   const idempotencyKeys = new Set<string>();

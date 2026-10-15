@@ -289,11 +289,6 @@ export function transitionAttempt(
   });
 }
 
-/**
- * Issues the next lease fence while a job is queued. Keeping this separate from
- * state transitions makes every assignment explicit and prevents a late event
- * from a previous attempt from mutating the current job.
- */
 export function advanceJobFence(snapshot: JobSnapshot, expectedStateVersion: number): JobSnapshot {
   assertNonEmptyId(snapshot.jobId, "jobId");
   assertJobState(snapshot.state);

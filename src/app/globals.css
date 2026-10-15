@@ -265,7 +265,6 @@ button:disabled {
   animation: scan 3.4s ease-in-out infinite;
 }
 
-/* Tiny telemetry labels need a stronger floor than the decorative site chrome. */
 .mission-control .text-\[\#52606d\],
 .mission-control .text-\[\#5f6d7b\],
 .mission-control .text-\[\#687583\] {
